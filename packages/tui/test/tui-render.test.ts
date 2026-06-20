@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import { Image } from "../src/components/image.ts";
+import { Text } from "../src/components/text.ts";
 import {
 	deleteKittyImage,
 	encodeKitty,
@@ -316,6 +317,33 @@ describe("TUI Kitty image cleanup", () => {
 		assert.ok(deleteIndex >= 0, "previous image should be deleted during full redraw");
 		assert.ok(clearIndex >= 0, "full redraw should clear the screen");
 		assert.ok(deleteIndex < clearIndex, "old image should be deleted before the screen is cleared");
+
+		tui.stop();
+	});
+});
+
+describe("TUI content inset", () => {
+	it("wraps base content inside the right inset while overlays use the full terminal width", async () => {
+		const terminal = new VirtualTerminal(30, 5);
+		const tui = new TUI(terminal);
+		tui.addChild(new Text("a".repeat(25), 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+
+		tui.setContentRightInset(10);
+		tui.showOverlay(
+			{ render: () => ["RIGHT"], invalidate: () => {} },
+			{ anchor: "top-right", width: 10, nonCapturing: true },
+		);
+		await terminal.waitForRender();
+
+		assert.deepStrictEqual(
+			terminal
+				.getViewport()
+				.slice(0, 2)
+				.map((line) => line.trimEnd()),
+			["aaaaaaaaaaaaaaaaaaaaRIGHT", "aaaaa"],
+		);
 
 		tui.stop();
 	});

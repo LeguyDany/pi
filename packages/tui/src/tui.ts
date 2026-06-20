@@ -297,7 +297,9 @@ export class TUI extends Container {
 	private previousLines: string[] = [];
 	private previousKittyImageIds = new Set<number>();
 	private previousWidth = 0;
+	private previousContentWidth = 0;
 	private previousHeight = 0;
+	private contentRightInset = 0;
 	private focusedComponent: Component | null = null;
 	private inputListeners = new Set<InputListener>();
 
@@ -361,6 +363,21 @@ export class TUI extends Container {
 	 */
 	setClearOnShrink(enabled: boolean): void {
 		this.clearOnShrink = enabled;
+	}
+
+	setContentRightInset(inset: number): void {
+		const nextInset = Math.max(0, Math.floor(inset));
+		if (this.contentRightInset === nextInset) return;
+		this.contentRightInset = nextInset;
+		this.requestRender(true);
+	}
+
+	getContentRightInset(): number {
+		return this.contentRightInset;
+	}
+
+	private getContentWidth(terminalWidth: number): number {
+		return Math.max(1, terminalWidth - Math.min(this.contentRightInset, terminalWidth - 1));
 	}
 
 	setFocus(component: Component | null): void {
@@ -713,6 +730,7 @@ export class TUI extends Container {
 		if (force) {
 			this.previousLines = [];
 			this.previousWidth = -1; // -1 triggers widthChanged, forcing a full clear
+			this.previousContentWidth = -1; // -1 triggers contentWidthChanged, forcing a full clear
 			this.previousHeight = -1; // -1 triggers heightChanged, forcing a full clear
 			this.cursorRow = 0;
 			this.hardwareCursorRow = 0;
@@ -1254,8 +1272,10 @@ export class TUI extends Container {
 	private doRender(): void {
 		if (this.stopped) return;
 		const width = this.terminal.columns;
+		const contentWidth = this.getContentWidth(width);
 		const height = this.terminal.rows;
 		const widthChanged = this.previousWidth !== 0 && this.previousWidth !== width;
+		const contentWidthChanged = this.previousContentWidth !== 0 && this.previousContentWidth !== contentWidth;
 		const heightChanged = this.previousHeight !== 0 && this.previousHeight !== height;
 		const previousBufferLength = this.previousHeight > 0 ? this.previousViewportTop + this.previousHeight : height;
 		let prevViewportTop = heightChanged ? Math.max(0, previousBufferLength - height) : this.previousViewportTop;
@@ -1268,7 +1288,7 @@ export class TUI extends Container {
 		};
 
 		// Render all components to get new lines
-		let newLines = this.render(width);
+		let newLines = this.render(contentWidth);
 
 		// Composite overlays into the rendered lines (before differential compare)
 		if (this.overlayStack.length > 0) {
@@ -1321,6 +1341,7 @@ export class TUI extends Container {
 			this.previousLines = newLines;
 			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 			this.previousWidth = width;
+			this.previousContentWidth = contentWidth;
 			this.previousHeight = height;
 		};
 
@@ -1333,7 +1354,7 @@ export class TUI extends Container {
 		};
 
 		// First render - just output everything without clearing (assumes clean screen)
-		if (this.previousLines.length === 0 && !widthChanged && !heightChanged) {
+		if (this.previousLines.length === 0 && !widthChanged && !contentWidthChanged && !heightChanged) {
 			logRedraw("first render");
 			fullRender(false);
 			return;
@@ -1342,6 +1363,12 @@ export class TUI extends Container {
 		// Width changes always need a full re-render because wrapping changes.
 		if (widthChanged) {
 			logRedraw(`terminal width changed (${this.previousWidth} -> ${width})`);
+			fullRender(true);
+			return;
+		}
+
+		if (contentWidthChanged) {
+			logRedraw(`content width changed (${this.previousContentWidth} -> ${contentWidth})`);
 			fullRender(true);
 			return;
 		}
@@ -1397,6 +1424,8 @@ export class TUI extends Container {
 		if (firstChanged === -1) {
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousViewportTop = prevViewportTop;
+			this.previousWidth = width;
+			this.previousContentWidth = contentWidth;
 			this.previousHeight = height;
 			return;
 		}
@@ -1445,6 +1474,7 @@ export class TUI extends Container {
 			this.previousLines = newLines;
 			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 			this.previousWidth = width;
+			this.previousContentWidth = contentWidth;
 			this.previousHeight = height;
 			this.previousViewportTop = prevViewportTop;
 			return;
@@ -1616,6 +1646,7 @@ export class TUI extends Container {
 		this.previousLines = newLines;
 		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 		this.previousWidth = width;
+		this.previousContentWidth = contentWidth;
 		this.previousHeight = height;
 	}
 
