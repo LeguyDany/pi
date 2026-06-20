@@ -416,8 +416,12 @@ export class InteractiveMode {
 		const tui = this.ui;
 		this.rightPanelComponent = {
 			render(width: number): string[] {
-				const lines = rightContent.render(width);
-				while (lines.length < tui.terminal.rows) lines.push("");
+				const lines = rightContent.render(width - 1);
+				const sep = theme.fg("muted", "│");
+				for (let i = 0; i < lines.length; i++) {
+					lines[i] = sep + lines[i];
+				}
+				while (lines.length < tui.terminal.rows) lines.push(sep);
 				return lines;
 			},
 			invalidate(): void {
