@@ -354,8 +354,13 @@ export class InteractiveMode {
 	// Extension widgets (components rendered above/below the editor)
 	private extensionWidgetsAbove = new Map<string, Component & { dispose?(): void }>();
 	private extensionWidgetsBelow = new Map<string, Component & { dispose?(): void }>();
+	private extensionWidgetsRight = new Map<string, Component & { dispose?(): void }>();
 	private widgetContainerAbove!: Container;
 	private widgetContainerBelow!: Container;
+	private widgetContainerRight!: Container;
+	private rightPanelComponent!: Component;
+	private rightPanelOverlay: OverlayHandle | undefined;
+	private rightPanelWidth = 40;
 
 	// Custom footer from extension (undefined = use built-in footer)
 	private customFooter: (Component & { dispose?(): void }) | undefined = undefined;
@@ -406,6 +411,19 @@ export class InteractiveMode {
 		this.statusContainer = new Container();
 		this.widgetContainerAbove = new Container();
 		this.widgetContainerBelow = new Container();
+		this.widgetContainerRight = new Container();
+		const rightContent = this.widgetContainerRight;
+		const tui = this.ui;
+		this.rightPanelComponent = {
+			render(width: number): string[] {
+				const lines = rightContent.render(width);
+				while (lines.length < tui.terminal.rows) lines.push("");
+				return lines;
+			},
+			invalidate(): void {
+				rightContent.invalidate();
+			},
+		};
 		this.keybindings = KeybindingsManager.create();
 		setKeybindings(this.keybindings);
 		const editorPaddingX = this.settingsManager.getEditorPaddingX();
@@ -638,7 +656,6 @@ export class InteractiveMode {
 
 		// Add header container as first child. Populate it after detectThemeIfUnset.
 		this.ui.addChild(this.headerContainer);
-
 		this.ui.addChild(this.chatContainer);
 		this.ui.addChild(this.pendingMessagesContainer);
 		this.ui.addChild(this.statusContainer);
@@ -1805,6 +1822,7 @@ export class InteractiveMode {
 
 		removeExisting(this.extensionWidgetsAbove);
 		removeExisting(this.extensionWidgetsBelow);
+		removeExisting(this.extensionWidgetsRight);
 
 		if (content === undefined) {
 			this.renderWidgets();
@@ -1828,8 +1846,13 @@ export class InteractiveMode {
 			component = content(this.ui, theme);
 		}
 
-		const targetMap = placement === "belowEditor" ? this.extensionWidgetsBelow : this.extensionWidgetsAbove;
-		targetMap.set(key, component);
+		if (placement === "right") {
+			this.extensionWidgetsRight.set(key, component);
+			this.rightPanelWidth = options?.rightWidth ?? 40;
+		} else {
+			const targetMap = placement === "belowEditor" ? this.extensionWidgetsBelow : this.extensionWidgetsAbove;
+			targetMap.set(key, component);
+		}
 		this.renderWidgets();
 	}
 
@@ -1840,8 +1863,14 @@ export class InteractiveMode {
 		for (const widget of this.extensionWidgetsBelow.values()) {
 			widget.dispose?.();
 		}
+		for (const widget of this.extensionWidgetsRight.values()) {
+			widget.dispose?.();
+		}
 		this.extensionWidgetsAbove.clear();
 		this.extensionWidgetsBelow.clear();
+		this.extensionWidgetsRight.clear();
+		this.rightPanelOverlay?.hide();
+		this.rightPanelOverlay = undefined;
 		this.renderWidgets();
 	}
 
@@ -1886,6 +1915,21 @@ export class InteractiveMode {
 		if (!this.widgetContainerAbove || !this.widgetContainerBelow) return;
 		this.renderWidgetContainer(this.widgetContainerAbove, this.extensionWidgetsAbove, true, true);
 		this.renderWidgetContainer(this.widgetContainerBelow, this.extensionWidgetsBelow, false, false);
+		this.renderWidgetContainer(this.widgetContainerRight, this.extensionWidgetsRight, false, false);
+		if (this.extensionWidgetsRight.size > 0) {
+			if (this.rightPanelOverlay) {
+				this.rightPanelOverlay.setHidden(false);
+			} else {
+				this.rightPanelOverlay = this.ui.showOverlay(this.rightPanelComponent, {
+					anchor: "top-right",
+					width: this.rightPanelWidth,
+					nonCapturing: true,
+				});
+			}
+		} else {
+			this.rightPanelOverlay?.hide();
+			this.rightPanelOverlay = undefined;
+		}
 		this.ui.requestRender();
 	}
 

@@ -94,12 +94,14 @@ export interface ExtensionUIDialogOptions {
 }
 
 /** Placement for extension widgets. */
-export type WidgetPlacement = "aboveEditor" | "belowEditor";
+export type WidgetPlacement = "aboveEditor" | "belowEditor" | "right";
 
 /** Options for extension widgets. */
 export interface ExtensionWidgetOptions {
 	/** Where the widget is rendered. Defaults to "aboveEditor". */
 	placement?: WidgetPlacement;
+	/** Width of the right-side panel in columns. Defaults to 40. Only used when placement is "right". */
+	rightWidth?: number;
 }
 
 /** Raw terminal input listener for extensions. */
