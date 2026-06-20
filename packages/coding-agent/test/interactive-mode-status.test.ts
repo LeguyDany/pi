@@ -4,7 +4,7 @@ import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@earend
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { type Component, Container, type Focusable, TUI } from "../../tui/src/tui.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
-import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
+import type { AutocompleteProviderFactory, ExtensionWidgetOptions } from "../src/core/extensions/types.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -267,6 +267,93 @@ describe("InteractiveMode.showExtensionCustom", () => {
 		} finally {
 			ui.stop();
 		}
+	});
+});
+
+describe("InteractiveMode.setExtensionWidget right panel", () => {
+	beforeAll(() => {
+		initTheme("dark");
+	});
+
+	test("reserves right-side width and restores full width when cleared", () => {
+		type WidgetComponent = Component & { dispose?(): void };
+		type OverlayHandleMock = {
+			hide: ReturnType<typeof vi.fn>;
+			setHidden: ReturnType<typeof vi.fn>;
+			isHidden: () => boolean;
+			focus: ReturnType<typeof vi.fn>;
+			unfocus: ReturnType<typeof vi.fn>;
+			isFocused: () => boolean;
+		};
+		type FakeInteractiveMode = {
+			extensionWidgetsAbove: Map<string, WidgetComponent>;
+			extensionWidgetsBelow: Map<string, WidgetComponent>;
+			extensionWidgetsRight: Map<string, WidgetComponent>;
+			widgetContainerAbove: Container;
+			widgetContainerBelow: Container;
+			widgetContainerRight: Container;
+			rightPanelComponent: Component;
+			rightPanelOverlay: OverlayHandleMock | undefined;
+			rightPanelOverlayWidth: number | undefined;
+			rightPanelWidth: number;
+			ui: {
+				setContentRightInset: ReturnType<typeof vi.fn>;
+				showOverlay: ReturnType<typeof vi.fn>;
+				requestRender: ReturnType<typeof vi.fn>;
+			};
+		};
+		const overlayHandle: OverlayHandleMock = {
+			hide: vi.fn(),
+			setHidden: vi.fn(),
+			isHidden: () => false,
+			focus: vi.fn(),
+			unfocus: vi.fn(),
+			isFocused: () => false,
+		};
+		const fakeThis = Object.create(InteractiveMode.prototype) as FakeInteractiveMode;
+		Object.assign(fakeThis, {
+			extensionWidgetsAbove: new Map(),
+			extensionWidgetsBelow: new Map(),
+			extensionWidgetsRight: new Map(),
+			widgetContainerAbove: new Container(),
+			widgetContainerBelow: new Container(),
+			widgetContainerRight: new Container(),
+			rightPanelComponent: { render: () => [], invalidate: () => {} },
+			rightPanelOverlay: undefined,
+			rightPanelOverlayWidth: undefined,
+			rightPanelWidth: 40,
+			ui: {
+				setContentRightInset: vi.fn(),
+				showOverlay: vi.fn(() => overlayHandle),
+				requestRender: vi.fn(),
+			},
+		});
+		const setExtensionWidget = (
+			InteractiveMode as unknown as {
+				prototype: {
+					setExtensionWidget(
+						this: FakeInteractiveMode,
+						key: string,
+						content: string[] | undefined,
+						options?: ExtensionWidgetOptions,
+					): void;
+				};
+			}
+		).prototype.setExtensionWidget;
+
+		setExtensionWidget.call(fakeThis, "agents", ["agent output"], { placement: "right", rightWidth: 12 });
+
+		expect(fakeThis.ui.setContentRightInset).toHaveBeenLastCalledWith(12);
+		expect(fakeThis.ui.showOverlay).toHaveBeenCalledWith(fakeThis.rightPanelComponent, {
+			anchor: "top-right",
+			width: 12,
+			nonCapturing: true,
+		});
+
+		setExtensionWidget.call(fakeThis, "agents", undefined);
+
+		expect(fakeThis.ui.setContentRightInset).toHaveBeenLastCalledWith(0);
+		expect(overlayHandle.hide).toHaveBeenCalledTimes(1);
 	});
 });
 

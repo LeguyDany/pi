@@ -45,6 +45,7 @@ import {
 	Text,
 	TruncatedText,
 	TUI,
+	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 import chalk from "chalk";
@@ -360,6 +361,7 @@ export class InteractiveMode {
 	private widgetContainerRight!: Container;
 	private rightPanelComponent!: Component;
 	private rightPanelOverlay: OverlayHandle | undefined;
+	private rightPanelOverlayWidth: number | undefined;
 	private rightPanelWidth = 40;
 
 	// Custom footer from extension (undefined = use built-in footer)
@@ -416,10 +418,11 @@ export class InteractiveMode {
 		const tui = this.ui;
 		this.rightPanelComponent = {
 			render(width: number): string[] {
-				const lines = rightContent.render(width - 1);
+				const contentWidth = Math.max(0, width - 1);
+				const lines = contentWidth > 0 ? rightContent.render(contentWidth) : [];
 				const sep = theme.fg("muted", "│");
 				for (let i = 0; i < lines.length; i++) {
-					lines[i] = sep + lines[i];
+					lines[i] = sep + truncateToWidth(lines[i], contentWidth, "");
 				}
 				while (lines.length < tui.terminal.rows) lines.push(sep);
 				return lines;
@@ -1852,7 +1855,7 @@ export class InteractiveMode {
 
 		if (placement === "right") {
 			this.extensionWidgetsRight.set(key, component);
-			this.rightPanelWidth = options?.rightWidth ?? 40;
+			this.rightPanelWidth = Math.max(1, Math.floor(options?.rightWidth ?? 40));
 		} else {
 			const targetMap = placement === "belowEditor" ? this.extensionWidgetsBelow : this.extensionWidgetsAbove;
 			targetMap.set(key, component);
@@ -1875,6 +1878,7 @@ export class InteractiveMode {
 		this.extensionWidgetsRight.clear();
 		this.rightPanelOverlay?.hide();
 		this.rightPanelOverlay = undefined;
+		this.rightPanelOverlayWidth = undefined;
 		this.renderWidgets();
 	}
 
@@ -1921,6 +1925,12 @@ export class InteractiveMode {
 		this.renderWidgetContainer(this.widgetContainerBelow, this.extensionWidgetsBelow, false, false);
 		this.renderWidgetContainer(this.widgetContainerRight, this.extensionWidgetsRight, false, false);
 		if (this.extensionWidgetsRight.size > 0) {
+			this.ui.setContentRightInset(this.rightPanelWidth);
+			if (this.rightPanelOverlay && this.rightPanelOverlayWidth !== this.rightPanelWidth) {
+				this.rightPanelOverlay.hide();
+				this.rightPanelOverlay = undefined;
+				this.rightPanelOverlayWidth = undefined;
+			}
 			if (this.rightPanelOverlay) {
 				this.rightPanelOverlay.setHidden(false);
 			} else {
@@ -1929,10 +1939,13 @@ export class InteractiveMode {
 					width: this.rightPanelWidth,
 					nonCapturing: true,
 				});
+				this.rightPanelOverlayWidth = this.rightPanelWidth;
 			}
 		} else {
+			this.ui.setContentRightInset(0);
 			this.rightPanelOverlay?.hide();
 			this.rightPanelOverlay = undefined;
+			this.rightPanelOverlayWidth = undefined;
 		}
 		this.ui.requestRender();
 	}
